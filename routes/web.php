@@ -15,8 +15,10 @@ Route::get('/', function () {
 Auth::routes(['register' => false]);
 
 Route::group(['middleware' => 'auth'], function () {
-    Route::get('/home', 'HomeController@index')
-        ->name('home');
+    // POS-only mode: the dashboard is replaced by the POS screen.
+    Route::get('/home', function () {
+        return redirect()->route('app.pos.index');
+    })->name('home');
 
     Route::get('/sales-purchases/chart-data', 'HomeController@salesPurchasesChart')
         ->name('sales-purchases.chart');
