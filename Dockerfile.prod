@@ -1,0 +1,38 @@
+# Production image: Apache + PHP 8.3 serving Laravel from /public.
+# Build/run via docker-compose.prod.yml (see DEPLOY.md).
+
+# ---- Stage 1: PHP dependencies (no dev packages) ----
+FROM composer:2 AS vendor
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist \
+    --no-interaction --ignore-platform-reqs
+
+# ---- Stage 2: runtime ----
+FROM php:8.3-apache
+
+# System libs for PHP extensions + wkhtmltopdf (PDF receipts)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libicu-dev \
+        libxrender1 libfontconfig1 libxext6 fonts-dejavu-core unzip \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" pdo_mysql gd zip intl exif bcmath opcache \
+    && a2enmod rewrite headers \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/apache-vhost.conf /etc/apache2/sites-available/000-default.conf
+COPY docker/php.ini /usr/local/etc/php/conf.d/zz-app.ini
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+COPY --from=vendor /app/vendor ./vendor
+COPY . .
+
+RUN composer dump-autoload --optimize --no-dev --no-interaction \
+    && ln -sfn ../storage/app/public public/storage \
+    && chmod +x vendor/h4cc/wkhtmltopdf-amd64/bin/wkhtmltopdf-amd64 docker/entrypoint.sh \
+    && chown -R www-data:www-data storage bootstrap/cache
+
+EXPOSE 80
+ENTRYPOINT ["docker/entrypoint.sh"]
+CMD ["apache2-foreground"]
