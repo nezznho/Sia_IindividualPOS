@@ -10,18 +10,22 @@ use Illuminate\Http\Request;
  * Authenticates API requests with a key sent as either:
  *   X-API-KEY: gc_xxxxx
  *   Authorization: Bearer gc_xxxxx
+ *   ?api_key=gc_xxxxx   (query string - handy for testing in a browser,
+ *                        but the key may end up in browser history/logs)
  */
 class ApiKeyAuth
 {
     public function handle(Request $request, Closure $next)
     {
-        $plain = $request->header('X-API-KEY') ?: $request->bearerToken();
+        $plain = $request->header('X-API-KEY')
+            ?: $request->bearerToken()
+            ?: $request->query('api_key');
 
         $key = $plain ? ApiKey::findActive($plain) : null;
 
         if (! $key) {
             return response()->json([
-                'message' => 'Invalid or missing API key. Send it in the X-API-KEY header.',
+                'message' => 'Invalid or missing API key. Send it in the X-API-KEY header or add ?api_key=YOUR_KEY to the URL.',
             ], 401);
         }
 
